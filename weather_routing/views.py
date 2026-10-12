@@ -169,6 +169,10 @@ def plan_route(request):
         return JsonResponse({"origin": origin, "destination": destination, "routes": routes, "recommended_route_id": routes[0]["route_id"], "forecast_hours": 48})
     except ValueError as error:
         return JsonResponse({"error": str(error)}, status=400)
+    except requests.exceptions.ProxyError:
+        return JsonResponse({
+            "error": "The server could not reach the routing or weather APIs through its configured proxy. Check HTTP_PROXY, HTTPS_PROXY, and ALL_PROXY in the server's terminal; a stale proxy setting can block these requests."
+        }, status=502)
     except requests.RequestException as error:
         response = getattr(error, "response", None)
         if response is not None and response.status_code in (401, 403):
