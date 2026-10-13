@@ -3,6 +3,18 @@ const COLORS = { LOW: '#19a974', MODERATE: '#d9a514', HIGH: '#ed7c28', SEVERE: '
 const RISK_ORDER = ['LOW', 'MODERATE', 'HIGH', 'SEVERE', 'NO_TRAVEL'];
 const formatTime = value => new Intl.DateTimeFormat(undefined, { dateStyle: 'short', timeStyle: 'short' }).format(new Date(value));
 const formatDuration = mins => `${Math.floor(mins / 60)}h ${mins % 60}m`;
+function summarizeAtHour(route, hour) {
+  const riskMiles = Object.fromEntries(RISK_ORDER.map(level => [level, 0]));
+  let weighted = 0;
+  route.checkpoints.slice(0, -1).forEach((checkpoint, index) => {
+    const next = route.checkpoints[index + 1];
+    const miles = Math.max(0, next.distance_miles - checkpoint.distance_miles);
+    const risk = checkpoint.forecasts[hour]?.risk || checkpoint.risk;
+    riskMiles[risk] += miles;
+    weighted += RISK_ORDER.indexOf(risk) * miles;
+  });
+  return { riskMiles, average: weighted / route.distance_miles };
+}
 function localDateTime() {
   const date = new Date(Date.now() + 60 * 60 * 1000);
   date.setMinutes(date.getMinutes() - date.getTimezoneOffset());
@@ -39,17 +51,13 @@ function App() {
 
   const shownSummary = useMemo(() => {
     if (!selected) return null;
-    const riskMiles = Object.fromEntries(RISK_ORDER.map(level => [level, 0]));
-    let weighted = 0;
-    selected.checkpoints.slice(0, -1).forEach((checkpoint, index) => {
-      const next = selected.checkpoints[index + 1];
-      const miles = Math.max(0, next.distance_miles - checkpoint.distance_miles);
-      const risk = checkpoint.forecasts[hour]?.risk || checkpoint.risk;
-      riskMiles[risk] += miles;
-      weighted += RISK_ORDER.indexOf(risk) * miles;
-    });
-    return { riskMiles, average: weighted / selected.distance_miles };
+    return summarizeAtHour(selected, hour);
   }, [selected, hour]);
+
+  const routeSummaries = useMemo(() => {
+    if (!result) return {};
+    return Object.fromEntries(result.routes.map(route => [route.route_id, summarizeAtHour(route, hour)]));
+  }, [result, hour]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -145,12 +153,12 @@ function App() {
             <div className="map-legend">{RISK_ORDER.map(risk => <span className="legend-item" key={risk}><i className="dot" style={{background:COLORS[risk]}}/>{risk.replace('_',' ')}</span>)}<span className="legend-item">● &nbsp;Checkpoint forecast at selected hour</span></div>
           </div>
           {result && <>
-            <div className="route-grid">{result.routes.map(route => <article key={route.route_id} className={`card route-card ${route.route_id === selected?.route_id ? 'active' : ''}`} onClick={() => setSelectedId(route.route_id)}>
+          <div className="route-grid">{result.routes.map(route => { const routeSummary = routeSummaries[route.route_id]; return <article key={route.route_id} className={`card route-card ${route.route_id === selected?.route_id ? 'active' : ''}`} onClick={() => setSelectedId(route.route_id)}>
               <div className="route-title"><strong>{route.name}</strong>{route.recommended && <span className="recommended">SAFEST PICK</span>}</div>
-              <div className="route-meta">{route.distance_miles.toLocaleString()} mi · {formatDuration(route.travel_minutes)}</div>
-              <div className="route-stats"><div className="stat"><small>Severe miles</small><b>{route.summary.risk_miles.SEVERE} mi</b></div><div className="stat"><small>High risk miles</small><b>{route.summary.risk_miles.HIGH} mi</b></div></div>
-              <div className="riskline">{RISK_ORDER.map(level => <i key={level} style={{width:`${route.summary.risk_miles[level] / route.distance_miles * 100}%`,background:COLORS[level]}} />)}</div>
-            </article>)}</div>
+              <div className="route-meta">{route.distance_miles.toLocaleString()} mi · {formatDuration(route.travel_minutes)} · Risk {hour ? `+${hour}h` : 'at ETA'}</div>
+              <div className="route-stats"><div className="stat"><small>Severe miles</small><b>{routeSummary.riskMiles.SEVERE.toFixed(1)} mi</b></div><div className="stat"><small>High risk miles</small><b>{routeSummary.riskMiles.HIGH.toFixed(1)} mi</b></div></div>
+              <div className="riskline">{RISK_ORDER.map(level => <i key={level} style={{width:`${routeSummary.riskMiles[level] / route.distance_miles * 100}%`,background:COLORS[level]}} />)}</div>
+            </article>; })}</div>
             {selected && <div className="card summary-card"><div className="summary-head"><h2>{selected.name} · route summary</h2><span className="eyebrow">{hour ? `Forecast +${hour} hours` : 'At estimated arrival'}</span></div>
               <div className="summary-grid"><div className="summary-cell"><small>Distance</small><b>{selected.distance_miles.toLocaleString()} mi</b></div><div className="summary-cell"><small>Travel time</small><b>{formatDuration(selected.travel_minutes)}</b></div><div className="summary-cell"><small>Severe</small><b style={{color:COLORS.SEVERE}}>{shownSummary.riskMiles.SEVERE.toFixed(1)} mi</b></div><div className="summary-cell"><small>High risk</small><b style={{color:COLORS.HIGH}}>{shownSummary.riskMiles.HIGH.toFixed(1)} mi</b></div><div className="summary-cell"><small>Average risk</small><b>{shownSummary.average.toFixed(2)} / 4</b></div></div>
               <div className="stops"><h3>Weather checkpoints · {selected.checkpoints.length}</h3><div className="stop-list">{selected.checkpoints.map((point,index) => { const w=point.forecasts[hour]||point.forecasts[0]; return <div className="stop" key={`${point.distance_miles}-${index}`}><b style={{color:w.color}}>Mile {point.distance_miles} · {w.risk.replace('_',' ')}</b><span>{formatTime(point.eta)}<br/>Wind {w.wind_mph} mph · Rain {w.rain_in_per_hour} in/hr</span></div> })}</div></div>
