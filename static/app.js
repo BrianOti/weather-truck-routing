@@ -122,7 +122,7 @@ function App() {
 
   const originRoute = result && `${result.origin.label} → ${result.destination.label}`;
   return <>
-    <header className="topbar"><div className="brand"><span className="brand-mark">●</span> spotter</div><span className="top-note">Weather aware dispatch · North America</span></header>
+    <header className="topbar"><div className="brand"><span className="brand-mark">●</span> spotter</div><span className="top-note">Weather aware dispatch · Global</span></header>
     <main className="layout">
       <div className="intro"><div><div className="eyebrow">Safer miles start here</div><h1>Weather-aware truck routing</h1><p>Compare route risk, checkpoint forecasts and travel time before you roll.</p></div><div className="status-pill">● &nbsp;Weather risk engine ready</div></div>
       <div className="columns">
